@@ -1,201 +1,195 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect
 import subprocess
 import os
 import json
-import requests
+import re
 
 app = Flask(__name__)
 
 @app.route('/')
 def hello():
-    return "Working Free AI APIs - Translation ✅ Sentiment ✅ AI Chat ✅"
+    return "Google Personal Auth - Get free Gemini access!"
 
-@app.route('/ai/huggingface', methods=['POST'])
-def huggingface_ai():
-    """Use Hugging Face with correct URL"""
+@app.route('/auth/get-link')
+def get_auth_link():
+    """Get Google OAuth link for personal account login"""
     try:
-        data = request.get_json()
-        prompt = data.get('prompt', 'Hello, how are you?')
+        # Run gcloud auth login with no-launch-browser to get the link
+        result = subprocess.run([
+            'gcloud', 'auth', 'login', '--no-launch-browser'
+        ], capture_output=True, text=True, timeout=30, input='\n')
         
-        # Use the new Hugging Face URL
-        url = "https://api-inference.huggingface.co/models/gpt2"
+        # Extract the OAuth URL from the output
+        output = result.stderr + result.stdout
         
-        headers = {
-            "Content-Type": "application/json"
-        }
+        # Look for the OAuth URL
+        url_pattern = r'https://accounts\.google\.com/o/oauth2/auth[^\s]+'
+        urls = re.findall(url_pattern, output)
         
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_length": 100,
-                "temperature": 0.7,
-                "return_full_text": False
+        if urls:
+            auth_url = urls[0]
+            return {
+                "success": True,
+                "auth_url": auth_url,
+                "instructions": [
+                    "1. Click the auth_url above",
+                    "2. Login with your personal Google account", 
+                    "3. Copy the verification code",
+                    "4. Use POST /auth/verify with the code"
+                ],
+                "next_step": "POST /auth/verify"
             }
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                ai_response = result[0].get('generated_text', prompt)
-            else:
-                ai_response = str(result)
         else:
-            ai_response = f"Error: {response.text}"
+            return {
+                "success": False,
+                "error": "Could not extract auth URL",
+                "output": output
+            }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/auth/verify', methods=['POST'])
+def verify_auth():
+    """Verify the auth code from Google"""
+    try:
+        data = request.get_json()
+        auth_code = data.get('code', '')
+        
+        if not auth_code:
+            return {"success": False, "error": "Please provide 'code' in JSON body"}
+        
+        # Complete the authentication with the code
+        result = subprocess.run([
+            'gcloud', 'auth', 'login', '--no-launch-browser'
+        ], capture_output=True, text=True, timeout=30, input=f'{auth_code}\n')
         
         return {
-            "success": response.status_code == 200,
-            "prompt": prompt,
-            "response": ai_response,
-            "model": "gpt2",
-            "provider": "Hugging Face (Free)"
+            "success": result.returncode == 0,
+            "output": result.stdout,
+            "error": result.stderr,
+            "message": "Authentication completed!" if result.returncode == 0 else "Authentication failed"
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/ai/simple', methods=['POST'])
-def simple_ai():
-    """Simple AI using basic text completion"""
+@app.route('/auth/status')
+def auth_status():
+    """Check current authentication status"""
     try:
-        data = request.get_json()
-        prompt = data.get('prompt', 'Write a Python function to add two numbers')
-        
-        # Simple rule-based responses for common programming questions
-        responses = {
-            "python function": """def add_numbers(a, b):
-    return a + b
-
-# Example usage:
-result = add_numbers(5, 3)
-print(result)  # Output: 8""",
-            
-            "hello world": """print("Hello, World!")""",
-            
-            "for loop": """for i in range(5):
-    print(i)""",
-            
-            "if statement": """if condition:
-    print("True")
-else:
-    print("False")"""
-        }
-        
-        prompt_lower = prompt.lower()
-        response_text = "I'm a simple AI. Try asking about Python functions, hello world, for loops, or if statements."
-        
-        for key, value in responses.items():
-            if key in prompt_lower:
-                response_text = value
-                break
+        result = subprocess.run([
+            'gcloud', 'auth', 'list'
+        ], capture_output=True, text=True, timeout=10)
         
         return {
             "success": True,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/gemini/test', methods=['POST'])
+def test_gemini():
+    """Test Gemini with personal account (should work without billing)"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello, write a Python function to add two numbers')
+        
+        # Try Gemini API call
+        result = subprocess.run([
+            'gcloud', 'ai', 'models', 'predict',
+            '--model', 'gemini-pro',
+            '--region', 'us-central1',
+            '--json-request', json.dumps({
+                "instances": [{"content": prompt}]
+            })
+        ], capture_output=True, text=True, timeout=30)
+        
+        return {
+            "success": result.returncode == 0,
             "prompt": prompt,
-            "response": response_text,
-            "model": "Simple Rule-Based AI",
-            "provider": "Local (100% Free)"
+            "output": result.stdout,
+            "error": result.stderr,
+            "model": "gemini-pro"
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/translate/free', methods=['POST'])
-def free_translate():
-    """Free translation using MyMemory API - WORKING!"""
+@app.route('/gemini/simple', methods=['GET'])
+def simple_gemini():
+    """Simple Gemini test with GET request"""
     try:
-        data = request.get_json()
-        text = data.get('text', 'Hello world')
-        target = data.get('target', 'es')
+        prompt = request.args.get('prompt', 'Write a hello world program in Python')
         
-        url = f"https://api.mymemory.translated.net/get?q={text}&langpair=en|{target}"
-        
-        response = requests.get(url, timeout=10)
-        result = response.json()
+        # Use curl to call Vertex AI API directly
+        result = subprocess.run([
+            'curl', '-X', 'POST',
+            f'https://us-central1-aiplatform.googleapis.com/v1/projects/{os.environ.get("GOOGLE_CLOUD_PROJECT", "peppy-bond-477619-a8")}/locations/us-central1/publishers/google/models/gemini-pro:generateContent',
+            '-H', 'Authorization: Bearer $(gcloud auth print-access-token)',
+            '-H', 'Content-Type: application/json',
+            '-d', json.dumps({
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            })
+        ], capture_output=True, text=True, timeout=30, shell=True)
         
         return {
-            "success": response.status_code == 200,
-            "input": text,
-            "target_language": target,
-            "translation": result.get('responseData', {}).get('translatedText', 'Translation failed'),
-            "provider": "MyMemory (100% Free) ✅"
+            "success": result.returncode == 0,
+            "prompt": prompt,
+            "output": result.stdout,
+            "error": result.stderr
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/sentiment/free', methods=['POST'])
-def free_sentiment():
-    """Free sentiment analysis - WORKING!"""
-    try:
-        data = request.get_json()
-        text = data.get('text', 'I love this product!')
-        
-        positive_words = ['love', 'great', 'awesome', 'excellent', 'good', 'amazing', 'wonderful', 'fantastic', 'perfect', 'best']
-        negative_words = ['hate', 'bad', 'terrible', 'awful', 'horrible', 'worst', 'disgusting', 'stupid', 'ugly', 'boring']
-        
-        text_lower = text.lower()
-        positive_count = sum(1 for word in positive_words if word in text_lower)
-        negative_count = sum(1 for word in negative_words if word in text_lower)
-        
-        if positive_count > negative_count:
-            sentiment = "POSITIVE"
-            score = min(0.9, 0.5 + (positive_count * 0.2))
-        elif negative_count > positive_count:
-            sentiment = "NEGATIVE" 
-            score = max(-0.9, -0.5 - (negative_count * 0.2))
-        else:
-            sentiment = "NEUTRAL"
-            score = 0.0
-            
-        return {
-            "success": True,
-            "input": text,
-            "sentiment": sentiment,
-            "score": score,
-            "positive_words_found": positive_count,
-            "negative_words_found": negative_count,
-            "provider": "Enhanced Word Matching ✅"
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/test-all')
-def test_all():
-    """Test all working endpoints"""
+@app.route('/instructions')
+def instructions():
+    """Step-by-step instructions"""
     return {
-        "working_endpoints": [
+        "title": "How to get free Gemini access with personal Google account",
+        "steps": [
             {
-                "name": "Translation",
-                "endpoint": "POST /translate/free",
-                "status": "✅ WORKING",
-                "example": {"text": "Hello world", "target": "es"}
+                "step": 1,
+                "action": "GET /auth/get-link",
+                "description": "Get Google OAuth URL"
             },
             {
-                "name": "Sentiment Analysis", 
-                "endpoint": "POST /sentiment/free",
-                "status": "✅ WORKING",
-                "example": {"text": "I love this product!"}
+                "step": 2, 
+                "action": "Click the auth_url in your browser",
+                "description": "Login with your personal Google account"
             },
             {
-                "name": "Simple AI",
-                "endpoint": "POST /ai/simple", 
-                "status": "✅ WORKING",
-                "example": {"prompt": "Write a Python function"}
+                "step": 3,
+                "action": "Copy the verification code from browser",
+                "description": "Google will show you a code"
+            },
+            {
+                "step": 4,
+                "action": "POST /auth/verify with {\"code\": \"your-code\"}",
+                "description": "Complete authentication"
+            },
+            {
+                "step": 5,
+                "action": "POST /gemini/test with {\"prompt\": \"your question\"}",
+                "description": "Use Gemini for free!"
             }
         ],
-        "message": "Don't be frustrated! You have working AI services! 🎉"
+        "note": "Personal Google accounts get free quotas without billing setup"
     }
 
 @app.route('/health')
 def health():
     return {
-        "status": "healthy ✅",
+        "status": "healthy",
         "platform": "Railway",
-        "working_services": 3,
-        "message": "Translation, Sentiment, and Simple AI are all working!"
+        "auth_method": "Personal Google Account (Free)",
+        "gemini_available": "After personal auth"
     }
 
 if __name__ == '__main__':
