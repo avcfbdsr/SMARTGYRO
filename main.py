@@ -2,196 +2,185 @@ from flask import Flask, jsonify, request
 import subprocess
 import os
 import json
+import requests
 
 app = Flask(__name__)
 
-def setup_and_activate_service_account():
-    """Setup service account and set as active account"""
-    try:
-        service_account_json = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-        if not service_account_json:
-            return False, "No service account JSON found"
-        
-        with open('service-account.json', 'w') as f:
-            f.write(service_account_json)
-        
-        subprocess.run([
-            'gcloud', 'auth', 'activate-service-account', 
-            '--key-file=service-account.json'
-        ], capture_output=True, text=True, timeout=15)
-        
-        subprocess.run([
-            'gcloud', 'config', 'set', 'account', 
-            'railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com'
-        ], capture_output=True, text=True, timeout=10)
-        
-        subprocess.run([
-            'gcloud', 'config', 'set', 'project', 'peppy-bond-477619-a8'
-        ], capture_output=True, text=True, timeout=10)
-        
-        return True, "Service account activated"
-        
-    except Exception as e:
-        return False, str(e)
-
-def install_beta_components():
-    """Install beta components quietly"""
-    try:
-        result = subprocess.run([
-            'gcloud', 'components', 'install', 'beta', '--quiet'
-        ], capture_output=True, text=True, timeout=60)
-        return result.returncode == 0
-    except:
-        return False
-
-def enable_api(api_name):
-    """Enable API quietly"""
-    try:
-        result = subprocess.run([
-            'gcloud', 'services', 'enable', api_name, '--quiet'
-        ], capture_output=True, text=True, timeout=30)
-        return result.returncode == 0, result.stderr
-    except Exception as e:
-        return False, str(e)
-
 @app.route('/')
 def hello():
-    return "Google ML APIs on Railway - Auto-enabling APIs!"
+    return "100% Free AI APIs - No billing required!"
 
-@app.route('/setup/install-beta')
-def install_beta():
-    """Install beta components"""
+@app.route('/ai/huggingface', methods=['POST'])
+def huggingface_ai():
+    """Use Hugging Face free AI models"""
     try:
-        setup_and_activate_service_account()
-        success = install_beta_components()
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello, how are you?')
+        
+        # Use Hugging Face Inference API (completely free)
+        url = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
+        
+        headers = {"Content-Type": "application/json"}
+        payload = {"inputs": prompt}
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
         return {
-            "success": success,
-            "message": "Beta components installed" if success else "Failed to install beta components"
+            "success": response.status_code == 200,
+            "prompt": prompt,
+            "response": response.json() if response.status_code == 200 else response.text,
+            "model": "microsoft/DialoGPT-medium",
+            "provider": "Hugging Face (100% Free)"
         }
+        
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/setup/enable-apis')
-def enable_apis():
-    """Enable required APIs"""
+@app.route('/translate/free', methods=['POST'])
+def free_translate():
+    """Free translation using MyMemory API"""
     try:
-        setup_and_activate_service_account()
-        
-        apis = [
-            'language.googleapis.com',
-            'translate.googleapis.com'
-        ]
-        
-        results = []
-        for api in apis:
-            success, error = enable_api(api)
-            results.append({
-                "api": api,
-                "success": success,
-                "error": error if not success else "Enabled successfully"
-            })
-        
-        return {"results": results}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/translate', methods=['POST'])
-def google_translate():
-    """Use Google Translate API with auto-setup"""
-    try:
-        setup_and_activate_service_account()
-        install_beta_components()
-        enable_api('translate.googleapis.com')
-        
         data = request.get_json()
         text = data.get('text', 'Hello world')
         target = data.get('target', 'es')
         
-        result = subprocess.run([
-            'gcloud', 'beta', 'ml', 'translate', 'translate-text',
-            '--content', text,
-            '--target-language', target,
-            '--format', 'json',
-            '--quiet'
-        ], capture_output=True, text=True, timeout=30)
+        # Use MyMemory free translation API
+        url = f"https://api.mymemory.translated.net/get?q={text}&langpair=en|{target}"
+        
+        response = requests.get(url, timeout=10)
+        result = response.json()
         
         return {
-            "success": result.returncode == 0,
+            "success": response.status_code == 200,
             "input": text,
             "target_language": target,
-            "output": result.stdout,
-            "error": result.stderr
+            "translation": result.get('responseData', {}).get('translatedText', 'Translation failed'),
+            "provider": "MyMemory (100% Free)"
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/language/sentiment', methods=['POST'])
-def analyze_sentiment():
-    """Analyze sentiment with auto-setup"""
+@app.route('/sentiment/free', methods=['POST'])
+def free_sentiment():
+    """Free sentiment analysis using TextBlob-like approach"""
     try:
-        setup_and_activate_service_account()
-        enable_api('language.googleapis.com')
-        
         data = request.get_json()
         text = data.get('text', 'I love this product!')
         
-        result = subprocess.run([
-            'gcloud', 'ml', 'language', 'analyze-sentiment',
-            '--content', text,
-            '--format', 'json',
-            '--quiet'
-        ], capture_output=True, text=True, timeout=30)
+        # Simple sentiment analysis using word matching
+        positive_words = ['love', 'great', 'awesome', 'excellent', 'good', 'amazing', 'wonderful', 'fantastic']
+        negative_words = ['hate', 'bad', 'terrible', 'awful', 'horrible', 'worst', 'disgusting']
         
+        text_lower = text.lower()
+        positive_count = sum(1 for word in positive_words if word in text_lower)
+        negative_count = sum(1 for word in negative_words if word in text_lower)
+        
+        if positive_count > negative_count:
+            sentiment = "POSITIVE"
+            score = 0.7
+        elif negative_count > positive_count:
+            sentiment = "NEGATIVE" 
+            score = -0.7
+        else:
+            sentiment = "NEUTRAL"
+            score = 0.0
+            
         return {
-            "success": result.returncode == 0,
+            "success": True,
             "input": text,
-            "output": result.stdout,
-            "error": result.stderr
+            "sentiment": sentiment,
+            "score": score,
+            "positive_words_found": positive_count,
+            "negative_words_found": negative_count,
+            "provider": "Simple Word Matching (100% Free)"
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/simple-test')
-def simple_test():
-    """Simple test without complex APIs"""
+@app.route('/ai/openai-free', methods=['POST'])
+def openai_free():
+    """Use OpenAI-compatible free APIs"""
     try:
-        setup_and_activate_service_account()
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello, how are you?')
         
-        # Test basic gcloud info
-        result = subprocess.run([
-            'gcloud', 'info', '--format', 'json'
-        ], capture_output=True, text=True, timeout=15)
+        # Use Groq free API (OpenAI-compatible)
+        url = "https://api.groq.com/openai/v1/chat/completions"
         
-        if result.returncode == 0:
-            return {
-                "success": True,
-                "message": "Google Cloud CLI is working!",
-                "account": "railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com",
-                "project": "peppy-bond-477619-a8"
-            }
-        else:
-            return {
-                "success": False,
-                "error": result.stderr
-            }
+        # This would need a free Groq API key
+        return {
+            "success": False,
+            "message": "Add GROQ_API_KEY environment variable for free Groq AI",
+            "alternative": "Use /ai/huggingface for completely free AI",
+            "groq_signup": "https://console.groq.com/ - Free 100 requests/day"
+        }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/status')
-def status():
-    """Check current status"""
+@app.route('/ai/local-llm', methods=['POST'])
+def local_llm():
+    """Information about running local LLMs"""
     return {
-        "message": "Google ML APIs require manual API enabling",
-        "steps": [
-            "1. Go to Google Cloud Console",
-            "2. Enable Natural Language API: https://console.developers.google.com/apis/api/language.googleapis.com/overview?project=peppy-bond-477619-a8",
-            "3. Enable Translate API: https://console.developers.google.com/apis/api/translate.googleapis.com/overview?project=peppy-bond-477619-a8",
-            "4. Wait a few minutes for activation"
+        "message": "Run AI models locally for 100% free usage",
+        "options": [
+            {
+                "name": "Ollama",
+                "description": "Run Llama, Mistral, etc. locally",
+                "install": "curl -fsSL https://ollama.ai/install.sh | sh",
+                "models": ["llama2", "mistral", "codellama"]
+            },
+            {
+                "name": "GPT4All",
+                "description": "Desktop app for local AI",
+                "website": "https://gpt4all.io/"
+            },
+            {
+                "name": "LM Studio", 
+                "description": "Easy local AI interface",
+                "website": "https://lmstudio.ai/"
+            }
+        ]
+    }
+
+@app.route('/free-services')
+def free_services():
+    """List all completely free AI services"""
+    return {
+        "completely_free": [
+            {
+                "service": "Hugging Face AI",
+                "endpoint": "POST /ai/huggingface",
+                "description": "Free AI text generation",
+                "quota": "Unlimited (with rate limits)"
+            },
+            {
+                "service": "MyMemory Translation",
+                "endpoint": "POST /translate/free", 
+                "description": "Free text translation",
+                "quota": "1000 words/day free"
+            },
+            {
+                "service": "Simple Sentiment Analysis",
+                "endpoint": "POST /sentiment/free",
+                "description": "Basic sentiment detection",
+                "quota": "Unlimited"
+            }
         ],
-        "working_endpoint": "/simple-test - Basic gcloud test"
+        "free_with_signup": [
+            {
+                "service": "Groq AI",
+                "quota": "100 requests/day free",
+                "signup": "https://console.groq.com/"
+            },
+            {
+                "service": "Cohere AI",
+                "quota": "100 requests/month free", 
+                "signup": "https://cohere.ai/"
+            }
+        ]
     }
 
 @app.route('/health')
@@ -199,8 +188,8 @@ def health():
     return {
         "status": "healthy",
         "platform": "Railway",
-        "gcloud": "authenticated",
-        "note": "APIs need manual enabling in Google Cloud Console"
+        "billing_required": False,
+        "free_ai_available": True
     }
 
 if __name__ == '__main__':
