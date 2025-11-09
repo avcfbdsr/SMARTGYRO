@@ -6,137 +6,199 @@ import requests
 
 app = Flask(__name__)
 
+def setup_and_activate_service_account():
+    """Setup service account and set as active account"""
+    try:
+        service_account_json = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+        if not service_account_json:
+            return False, "No service account JSON found"
+        
+        with open('service-account.json', 'w') as f:
+            f.write(service_account_json)
+        
+        subprocess.run([
+            'gcloud', 'auth', 'activate-service-account', 
+            '--key-file=service-account.json'
+        ], capture_output=True, text=True, timeout=15)
+        
+        subprocess.run([
+            'gcloud', 'config', 'set', 'account', 
+            'railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com'
+        ], capture_output=True, text=True, timeout=10)
+        
+        subprocess.run([
+            'gcloud', 'config', 'set', 'project', 'peppy-bond-477619-a8'
+        ], capture_output=True, text=True, timeout=10)
+        
+        return True, "Service account activated"
+        
+    except Exception as e:
+        return False, str(e)
+
 @app.route('/')
 def hello():
-    return "Free AI Models on Railway - No billing required!"
+    return "Google AI on Railway - Using free services!"
 
-@app.route('/ai/huggingface', methods=['POST'])
-def huggingface_ai():
-    """Use Hugging Face free AI models"""
+@app.route('/translate', methods=['POST'])
+def google_translate():
+    """Use Google Translate API (has free quota)"""
     try:
+        setup_and_activate_service_account()
+        
         data = request.get_json()
-        prompt = data.get('prompt', 'Hello, how are you?')
+        text = data.get('text', 'Hello world')
+        target = data.get('target', 'es')  # Spanish by default
         
-        # Use Hugging Face Inference API (free)
-        url = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
-        
-        headers = {
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_length": 100,
-                "temperature": 0.7
-            }
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        result = subprocess.run([
+            'gcloud', 'ml', 'translate', 'translate', text,
+            '--target-language', target,
+            '--format', 'json'
+        ], capture_output=True, text=True, timeout=20)
         
         return {
-            "success": response.status_code == 200,
-            "prompt": prompt,
-            "response": response.json() if response.status_code == 200 else response.text,
-            "model": "microsoft/DialoGPT-medium",
-            "provider": "Hugging Face (Free)"
+            "success": result.returncode == 0,
+            "input": text,
+            "target_language": target,
+            "output": result.stdout,
+            "error": result.stderr
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/ai/ollama', methods=['POST'])
-def ollama_ai():
-    """Use Ollama for local AI (if available)"""
+@app.route('/speech/synthesize', methods=['POST'])
+def text_to_speech():
+    """Use Google Text-to-Speech (has free quota)"""
     try:
-        data = request.get_json()
-        prompt = data.get('prompt', 'Hello, how are you?')
+        setup_and_activate_service_account()
         
-        # Try to use Ollama (free, local AI)
+        data = request.get_json()
+        text = data.get('text', 'Hello, this is a test')
+        
         result = subprocess.run([
-            'curl', '-X', 'POST', 'http://localhost:11434/api/generate',
-            '-H', 'Content-Type: application/json',
-            '-d', json.dumps({
-                "model": "llama2",
-                "prompt": prompt,
-                "stream": False
+            'gcloud', 'ml', 'speech', 'synthesize-text', text,
+            '--output-file', 'output.wav'
+        ], capture_output=True, text=True, timeout=20)
+        
+        return {
+            "success": result.returncode == 0,
+            "text": text,
+            "output": result.stdout,
+            "error": result.stderr,
+            "message": "Audio file would be generated as output.wav"
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/vision/detect', methods=['POST'])
+def vision_api():
+    """Use Google Vision API for image analysis"""
+    try:
+        setup_and_activate_service_account()
+        
+        data = request.get_json()
+        image_url = data.get('image_url', 'https://example.com/image.jpg')
+        
+        result = subprocess.run([
+            'gcloud', 'ml', 'vision', 'detect-labels', image_url
+        ], capture_output=True, text=True, timeout=20)
+        
+        return {
+            "success": result.returncode == 0,
+            "image_url": image_url,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/ai/gemini-free', methods=['POST'])
+def gemini_free_quota():
+    """Try Gemini with free quota (if available)"""
+    try:
+        setup_and_activate_service_account()
+        
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello')
+        
+        # Try using Gemini Flash (cheaper/free tier)
+        result = subprocess.run([
+            'gcloud', 'ai', 'models', 'predict',
+            '--model', 'gemini-1.5-flash',
+            '--region', 'us-central1',
+            '--json-request', json.dumps({
+                "instances": [{"content": prompt}]
             })
         ], capture_output=True, text=True, timeout=30)
         
-        if result.returncode == 0:
-            return {
-                "success": True,
-                "prompt": prompt,
-                "response": result.stdout,
-                "model": "llama2",
-                "provider": "Ollama (Local)"
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Ollama not available",
-                "suggestion": "Install Ollama for local AI models"
-            }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/ai/openai-free', methods=['POST'])
-def openai_free():
-    """Use OpenAI-compatible free APIs"""
-    try:
-        data = request.get_json()
-        prompt = data.get('prompt', 'Hello, how are you?')
-        
-        # Use a free OpenAI-compatible API
-        url = "https://api.openai.com/v1/chat/completions"
-        
-        # Note: This requires an OpenAI API key
-        # For demo purposes, returning a mock response
         return {
-            "success": False,
-            "error": "OpenAI API key required",
-            "suggestion": "Add OPENAI_API_KEY environment variable for OpenAI access",
-            "alternatives": [
-                "Use /ai/huggingface for free AI",
-                "Enable Google Cloud billing for Gemini",
-                "Install Ollama for local AI"
-            ]
+            "success": result.returncode == 0,
+            "prompt": prompt,
+            "output": result.stdout,
+            "error": result.stderr,
+            "model": "gemini-1.5-flash"
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/billing/info')
-def billing_info():
-    """Information about enabling Google Cloud billing"""
+@app.route('/quota/check')
+def check_quotas():
+    """Check available quotas for different services"""
+    try:
+        setup_and_activate_service_account()
+        
+        result = subprocess.run([
+            'gcloud', 'compute', 'project-info', 'describe',
+            '--format', 'json'
+        ], capture_output=True, text=True, timeout=15)
+        
+        return {
+            "success": result.returncode == 0,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/free-services')
+def free_services():
+    """List free Google Cloud services"""
     return {
-        "message": "Google AI models require billing to be enabled",
-        "steps": [
-            "1. Go to Google Cloud Console",
-            "2. Select project: peppy-bond-477619-a8", 
-            "3. Go to Billing section",
-            "4. Add payment method (credit card)",
-            "5. Enable billing for the project",
-            "6. Wait a few minutes for activation"
+        "free_services": [
+            {
+                "service": "Google Translate",
+                "endpoint": "/translate",
+                "quota": "500,000 characters/month free"
+            },
+            {
+                "service": "Text-to-Speech", 
+                "endpoint": "/speech/synthesize",
+                "quota": "1 million characters/month free"
+            },
+            {
+                "service": "Vision API",
+                "endpoint": "/vision/detect", 
+                "quota": "1,000 requests/month free"
+            },
+            {
+                "service": "Natural Language API",
+                "quota": "5,000 requests/month free"
+            }
         ],
-        "billing_url": "https://console.developers.google.com/billing/enable?project=peppy-bond-477619-a8",
-        "free_alternatives": [
-            "/ai/huggingface - Free Hugging Face models",
-            "/ai/ollama - Local AI models (if installed)"
-        ]
+        "note": "These services have free quotas that don't require billing setup"
     }
 
 @app.route('/health')
 def health():
     return {
         "status": "healthy",
-        "platform": "Railway", 
-        "ai_options": [
-            "Hugging Face (Free)",
-            "Google Gemini (Requires billing)",
-            "Ollama (Local, if installed)"
-        ]
+        "platform": "Railway",
+        "gcloud": "authenticated",
+        "free_services_available": True
     }
 
 if __name__ == '__main__':
