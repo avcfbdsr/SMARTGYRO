@@ -6,160 +6,137 @@ import requests
 
 app = Flask(__name__)
 
-def setup_and_activate_service_account():
-    """Setup service account and set as active account"""
-    try:
-        service_account_json = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-        if not service_account_json:
-            return False, "No service account JSON found"
-        
-        with open('service-account.json', 'w') as f:
-            f.write(service_account_json)
-        
-        subprocess.run([
-            'gcloud', 'auth', 'activate-service-account', 
-            '--key-file=service-account.json'
-        ], capture_output=True, text=True, timeout=15)
-        
-        subprocess.run([
-            'gcloud', 'config', 'set', 'account', 
-            'railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com'
-        ], capture_output=True, text=True, timeout=10)
-        
-        subprocess.run([
-            'gcloud', 'config', 'set', 'project', 'peppy-bond-477619-a8'
-        ], capture_output=True, text=True, timeout=10)
-        
-        return True, "Service account activated"
-        
-    except Exception as e:
-        return False, str(e)
-
-def get_access_token():
-    """Get Google Cloud access token"""
-    try:
-        result = subprocess.run([
-            'gcloud', 'auth', 'print-access-token'
-        ], capture_output=True, text=True, timeout=10)
-        
-        if result.returncode == 0:
-            return result.stdout.strip()
-        return None
-    except:
-        return None
-
 @app.route('/')
 def hello():
-    return "Google AI Models on Railway - Ready to use!"
+    return "Free AI Models on Railway - No billing required!"
 
-@app.route('/gemini/test', methods=['POST'])
-def test_gemini():
-    """Test Gemini AI model using Python requests"""
+@app.route('/ai/huggingface', methods=['POST'])
+def huggingface_ai():
+    """Use Hugging Face free AI models"""
     try:
-        setup_and_activate_service_account()
-        
         data = request.get_json()
         prompt = data.get('prompt', 'Hello, how are you?')
         
-        # Get access token
-        access_token = get_access_token()
-        if not access_token:
-            return {"success": False, "error": "Failed to get access token"}
-        
-        # Call Vertex AI API using Python requests
-        url = f'https://us-central1-aiplatform.googleapis.com/v1/projects/peppy-bond-477619-a8/locations/us-central1/publishers/google/models/gemini-pro:generateContent'
+        # Use Hugging Face Inference API (free)
+        url = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
         
         headers = {
-            'Authorization': f'Bearer {access_token}',
-            'Content-Type': 'application/json'
+            "Content-Type": "application/json"
         }
         
         payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
+            "inputs": prompt,
+            "parameters": {
+                "max_length": 100,
+                "temperature": 0.7
+            }
         }
         
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         
         return {
             "success": response.status_code == 200,
-            "status_code": response.status_code,
-            "output": response.text,
-            "error": "" if response.status_code == 200 else f"HTTP {response.status_code}"
+            "prompt": prompt,
+            "response": response.json() if response.status_code == 200 else response.text,
+            "model": "microsoft/DialoGPT-medium",
+            "provider": "Hugging Face (Free)"
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/gemini/simple', methods=['GET'])
-def simple_gemini():
-    """Simple Gemini test with GET request"""
+@app.route('/ai/ollama', methods=['POST'])
+def ollama_ai():
+    """Use Ollama for local AI (if available)"""
     try:
-        setup_and_activate_service_account()
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello, how are you?')
         
-        prompt = request.args.get('prompt', 'Write a hello world program in Python')
+        # Try to use Ollama (free, local AI)
+        result = subprocess.run([
+            'curl', '-X', 'POST', 'http://localhost:11434/api/generate',
+            '-H', 'Content-Type: application/json',
+            '-d', json.dumps({
+                "model": "llama2",
+                "prompt": prompt,
+                "stream": False
+            })
+        ], capture_output=True, text=True, timeout=30)
         
-        access_token = get_access_token()
-        if not access_token:
-            return {"success": False, "error": "Failed to get access token"}
+        if result.returncode == 0:
+            return {
+                "success": True,
+                "prompt": prompt,
+                "response": result.stdout,
+                "model": "llama2",
+                "provider": "Ollama (Local)"
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Ollama not available",
+                "suggestion": "Install Ollama for local AI models"
+            }
         
-        url = f'https://us-central1-aiplatform.googleapis.com/v1/projects/peppy-bond-477619-a8/locations/us-central1/publishers/google/models/gemini-pro:generateContent'
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/ai/openai-free', methods=['POST'])
+def openai_free():
+    """Use OpenAI-compatible free APIs"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello, how are you?')
         
-        headers = {
-            'Authorization': f'Bearer {access_token}',
-            'Content-Type': 'application/json'
-        }
+        # Use a free OpenAI-compatible API
+        url = "https://api.openai.com/v1/chat/completions"
         
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                ai_response = result['candidates'][0]['content']['parts'][0]['text']
-                return {
-                    "success": True,
-                    "prompt": prompt,
-                    "response": ai_response
-                }
-        
+        # Note: This requires an OpenAI API key
+        # For demo purposes, returning a mock response
         return {
             "success": False,
-            "status_code": response.status_code,
-            "error": response.text
+            "error": "OpenAI API key required",
+            "suggestion": "Add OPENAI_API_KEY environment variable for OpenAI access",
+            "alternatives": [
+                "Use /ai/huggingface for free AI",
+                "Enable Google Cloud billing for Gemini",
+                "Install Ollama for local AI"
+            ]
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/ai/token')
-def get_token():
-    """Get access token for debugging"""
-    try:
-        setup_and_activate_service_account()
-        token = get_access_token()
-        return {
-            "success": bool(token),
-            "token_length": len(token) if token else 0,
-            "token_preview": token[:20] + "..." if token else None
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+@app.route('/billing/info')
+def billing_info():
+    """Information about enabling Google Cloud billing"""
+    return {
+        "message": "Google AI models require billing to be enabled",
+        "steps": [
+            "1. Go to Google Cloud Console",
+            "2. Select project: peppy-bond-477619-a8", 
+            "3. Go to Billing section",
+            "4. Add payment method (credit card)",
+            "5. Enable billing for the project",
+            "6. Wait a few minutes for activation"
+        ],
+        "billing_url": "https://console.developers.google.com/billing/enable?project=peppy-bond-477619-a8",
+        "free_alternatives": [
+            "/ai/huggingface - Free Hugging Face models",
+            "/ai/ollama - Local AI models (if installed)"
+        ]
+    }
 
 @app.route('/health')
 def health():
     return {
         "status": "healthy",
-        "platform": "Railway",
-        "gcloud": "authenticated",
-        "ai_ready": True,
-        "project": "peppy-bond-477619-a8"
+        "platform": "Railway", 
+        "ai_options": [
+            "Hugging Face (Free)",
+            "Google Gemini (Requires billing)",
+            "Ollama (Local, if installed)"
+        ]
     }
 
 if __name__ == '__main__':
