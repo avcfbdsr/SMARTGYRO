@@ -8,6 +8,9 @@ setup_gcloud_auth()
 
 app = Flask(__name__)
 
+# Set gcloud path
+GCLOUD_PATH = "/opt/render/project/src/google-cloud-sdk/bin/gcloud"
+
 @app.route('/')
 def hello():
     return "Google CLI installed and ready!"
@@ -15,26 +18,22 @@ def hello():
 @app.route('/gcloud/version')
 def gcloud_version():
     try:
-        result = subprocess.run(['gcloud', 'version'], capture_output=True, text=True)
+        result = subprocess.run([GCLOUD_PATH, 'version'], capture_output=True, text=True)
         return {"output": result.stdout, "error": result.stderr}
     except Exception as e:
         return {"error": str(e)}
 
-@app.route('/gcloud/projects')
-def list_projects():
+@app.route('/gcloud/which')
+def which_gcloud():
     try:
-        result = subprocess.run(['gcloud', 'projects', 'list', '--format=json'], capture_output=True, text=True)
+        result = subprocess.run(['which', 'gcloud'], capture_output=True, text=True)
         return {"output": result.stdout, "error": result.stderr}
     except Exception as e:
         return {"error": str(e)}
 
-@app.route('/gcloud/config')
-def show_config():
-    try:
-        result = subprocess.run(['gcloud', 'config', 'list'], capture_output=True, text=True)
-        return {"output": result.stdout, "error": result.stderr}
-    except Exception as e:
-        return {"error": str(e)}
+@app.route('/gcloud/path')
+def check_path():
+    return {"PATH": os.environ.get('PATH', 'Not found')}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)

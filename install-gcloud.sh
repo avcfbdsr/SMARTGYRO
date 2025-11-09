@@ -1,16 +1,19 @@
 #!/bin/bash
-# Install Google Cloud CLI on Render
+set -e
 
-# Download and install gcloud
-curl https://sdk.cloud.google.com | bash
-exec -l $SHELL
+# Install dependencies
+apt-get update
+apt-get install -y curl python3 python3-pip
 
-# Add to PATH
-echo 'source ~/google-cloud-sdk/path.bash.inc' >> ~/.bashrc
-echo 'source ~/google-cloud-sdk/completion.bash.inc' >> ~/.bashrc
+# Download and install Google Cloud CLI
+curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-455.0.0-linux-x86_64.tar.gz -o gcloud.tar.gz
+tar -xf gcloud.tar.gz
+./google-cloud-sdk/install.sh --quiet --path-update=true
 
-# Reload shell
-source ~/.bashrc
+# Add to PATH permanently
+echo 'export PATH="/opt/render/project/src/google-cloud-sdk/bin:$PATH"' >> ~/.bashrc
+export PATH="/opt/render/project/src/google-cloud-sdk/bin:$PATH"
 
 # Verify installation
+which gcloud
 gcloud version
