@@ -2,165 +2,101 @@ from flask import Flask, jsonify, request
 import subprocess
 import os
 import json
+import requests
 
 app = Flask(__name__)
 
 @app.route('/')
 def hello():
-    return "Simple Google Auth - Bypass OAuth issues!"
+    return "Personal Google Cloud Project - Bypass OAuth issues!"
 
-@app.route('/auth/direct', methods=['POST'])
-def direct_auth():
-    """Direct authentication with verification code"""
-    try:
-        data = request.get_json()
-        verification_code = data.get('code', '').strip()
-        
-        if not verification_code:
-            return {
-                "success": False,
-                "error": "Please provide verification code",
-                "instructions": [
-                    "1. Run: gcloud auth login --no-launch-browser (on your local machine)",
-                    "2. Copy the verification code from browser",
-                    "3. Send it here with POST /auth/direct {\"code\": \"your-code\"}"
-                ]
-            }
-        
-        # Try to authenticate directly with the code
-        # First, revoke existing auth
-        subprocess.run(['gcloud', 'auth', 'revoke', '--all'], 
-                      capture_output=True, text=True)
-        
-        # Use a different approach - create credentials file
-        result = subprocess.run([
-            'gcloud', 'auth', 'login', '--cred-file=/dev/stdin'
-        ], input=verification_code, capture_output=True, text=True, timeout=30)
-        
-        if result.returncode == 0:
-            return {
-                "success": True,
-                "message": "Authentication successful!",
-                "output": result.stdout
-            }
-        else:
-            # Try alternative method
-            result2 = subprocess.run([
-                'bash', '-c', f'echo "{verification_code}" | gcloud auth login --no-launch-browser'
-            ], capture_output=True, text=True, timeout=30)
-            
-            return {
-                "success": result2.returncode == 0,
-                "message": "Authentication completed" if result2.returncode == 0 else "Authentication failed",
-                "output": result2.stdout,
-                "error": result2.stderr
-            }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/auth/manual-steps')
-def manual_steps():
-    """Manual steps to get authenticated"""
+@app.route('/solution')
+def solution():
+    """The solution to OAuth S256 error"""
     return {
-        "title": "Manual Authentication (Bypass OAuth issues)",
+        "problem": "OAuth S256 error is a known gcloud CLI bug on servers",
+        "solution": "Create your own Google Cloud project with personal account",
         "steps": [
             {
                 "step": 1,
-                "description": "On your LOCAL computer, run:",
-                "command": "gcloud auth login --no-launch-browser"
+                "title": "Create Personal Google Cloud Project",
+                "actions": [
+                    "1. Go to https://console.cloud.google.com/",
+                    "2. Login with a91308459@gmail.com",
+                    "3. Click 'New Project'",
+                    "4. Name it 'personal-ai-project'",
+                    "5. Create the project"
+                ]
             },
             {
                 "step": 2,
-                "description": "Copy the verification code from the browser"
+                "title": "Create Service Account",
+                "actions": [
+                    "1. Go to IAM & Admin → Service Accounts",
+                    "2. Click 'Create Service Account'",
+                    "3. Name: 'railway-personal'",
+                    "4. Role: 'Editor' or 'Owner'",
+                    "5. Create JSON key",
+                    "6. Download the JSON file"
+                ]
             },
             {
                 "step": 3,
-                "description": "Send the code to this endpoint:",
-                "endpoint": "POST /auth/direct",
-                "body": {"code": "your-verification-code"}
-            }
-        ],
-        "example_code": """
-import requests
-response = requests.post("https://smartgyro-production.up.railway.app/auth/direct",
-                        json={"code": "4/0Ab32j914gml0MsTtOUsfsDa_2rnyxLbHurqrY5-BA3lNFZDhUL8LZC59bCI1knLIAMY57g"})
-print(response.json())
-        """,
-        "note": "Use the verification code from your browser"
-    }
-
-@app.route('/auth/alternative')
-def auth_alternative():
-    """Alternative authentication method"""
-    return {
-        "message": "Since OAuth has issues, let's try a different approach",
-        "alternative_methods": [
-            {
-                "method": "Application Default Credentials",
-                "description": "Use your local gcloud credentials",
-                "steps": [
-                    "1. On your local machine: gcloud auth application-default login",
-                    "2. Copy the credentials file to Railway",
-                    "3. Set GOOGLE_APPLICATION_CREDENTIALS environment variable"
+                "title": "Enable APIs",
+                "actions": [
+                    "1. Go to APIs & Services → Library",
+                    "2. Enable 'Vertex AI API'",
+                    "3. Enable 'Generative AI API'",
+                    "4. No billing required for personal projects with free quotas!"
                 ]
             },
             {
-                "method": "Service Account with User Access",
-                "description": "Create a service account with your personal project",
-                "steps": [
-                    "1. Create a new Google Cloud project with your personal account",
-                    "2. Create a service account in that project", 
-                    "3. Download the JSON key",
-                    "4. Use it in Railway"
+                "step": 4,
+                "title": "Update Railway Environment",
+                "actions": [
+                    "1. Copy the JSON content",
+                    "2. Update GOOGLE_SERVICE_ACCOUNT_JSON in Railway",
+                    "3. Add GOOGLE_CLOUD_PROJECT with your project ID"
                 ]
             }
+        ],
+        "why_this_works": [
+            "Personal Google accounts get free quotas",
+            "No billing setup required for basic usage",
+            "Service accounts work better than OAuth on servers",
+            "You control the project and permissions"
         ]
     }
 
-@app.route('/test-current-auth')
-def test_current_auth():
-    """Test if any authentication is working"""
-    try:
-        # Test gcloud auth list
-        result1 = subprocess.run(['gcloud', 'auth', 'list'], 
-                                capture_output=True, text=True, timeout=10)
-        
-        # Test access token
-        result2 = subprocess.run(['gcloud', 'auth', 'print-access-token'], 
-                                capture_output=True, text=True, timeout=10)
-        
-        # Test project info
-        result3 = subprocess.run(['gcloud', 'config', 'list'], 
-                                capture_output=True, text=True, timeout=10)
-        
-        return {
-            "auth_list": {
-                "success": result1.returncode == 0,
-                "output": result1.stdout,
-                "error": result1.stderr
-            },
-            "access_token": {
-                "success": result2.returncode == 0,
-                "has_token": len(result2.stdout.strip()) > 0,
-                "error": result2.stderr
-            },
-            "config": {
-                "success": result3.returncode == 0,
-                "output": result3.stdout,
-                "error": result3.stderr
-            }
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/gemini/test', methods=['POST'])
-def test_gemini():
-    """Test Gemini (will work once authenticated)"""
+@app.route('/test-with-project', methods=['POST'])
+def test_with_project():
+    """Test Gemini with personal project"""
     try:
         data = request.get_json()
+        project_id = data.get('project_id', '')
         prompt = data.get('prompt', 'Write a Python hello world program')
+        
+        if not project_id:
+            return {
+                "success": False,
+                "error": "Please provide your project_id",
+                "example": {"project_id": "your-personal-project-id", "prompt": "your question"}
+            }
+        
+        # Setup service account if available
+        service_account_json = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+        if service_account_json:
+            with open('service-account.json', 'w') as f:
+                f.write(service_account_json)
+            
+            subprocess.run([
+                'gcloud', 'auth', 'activate-service-account', 
+                '--key-file=service-account.json'
+            ], capture_output=True, text=True, timeout=15)
+            
+            subprocess.run([
+                'gcloud', 'config', 'set', 'project', project_id
+            ], capture_output=True, text=True, timeout=10)
         
         # Get access token
         token_result = subprocess.run([
@@ -170,15 +106,14 @@ def test_gemini():
         if token_result.returncode != 0:
             return {
                 "success": False,
-                "error": "Not authenticated. Use /auth/direct first.",
-                "auth_required": True
+                "error": "Authentication failed. Please update GOOGLE_SERVICE_ACCOUNT_JSON with your personal project service account",
+                "token_error": token_result.stderr
             }
         
         access_token = token_result.stdout.strip()
         
-        # Test with a simple API call first
-        import requests
-        url = 'https://us-central1-aiplatform.googleapis.com/v1/projects/peppy-bond-477619-a8/locations/us-central1/publishers/google/models/gemini-pro:generateContent'
+        # Call Gemini API with personal project
+        url = f'https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/gemini-pro:generateContent'
         
         headers = {
             'Authorization': f'Bearer {access_token}',
@@ -193,22 +128,99 @@ def test_gemini():
         
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         
+        if response.status_code == 200:
+            result = response.json()
+            if 'candidates' in result and len(result['candidates']) > 0:
+                ai_response = result['candidates'][0]['content']['parts'][0]['text']
+                return {
+                    "success": True,
+                    "prompt": prompt,
+                    "response": ai_response,
+                    "model": "gemini-pro",
+                    "project": project_id
+                }
+        
         return {
-            "success": response.status_code == 200,
-            "prompt": prompt,
-            "response": response.json() if response.status_code == 200 else response.text,
-            "status_code": response.status_code
+            "success": False,
+            "status_code": response.status_code,
+            "error": response.text,
+            "project": project_id
         }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.route('/free-alternative')
+def free_alternative():
+    """Free AI alternative while you set up personal project"""
+    return {
+        "message": "While you set up your personal Google Cloud project, use these free alternatives:",
+        "alternatives": [
+            {
+                "name": "Groq AI",
+                "description": "Free Llama models - 100 requests/day",
+                "signup": "https://console.groq.com/",
+                "api_key_needed": True
+            },
+            {
+                "name": "Hugging Face",
+                "description": "Free AI models",
+                "signup": "https://huggingface.co/",
+                "api_key_needed": True
+            },
+            {
+                "name": "Cohere",
+                "description": "Free AI API - 100 requests/month",
+                "signup": "https://cohere.ai/",
+                "api_key_needed": True
+            }
+        ],
+        "working_now": [
+            "Translation API (MyMemory) - working",
+            "Sentiment Analysis - working",
+            "Simple rule-based AI - working"
+        ]
+    }
+
+@app.route('/current-status')
+def current_status():
+    """Show current authentication status"""
+    try:
+        # Check service account
+        service_account_json = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+        has_service_account = bool(service_account_json)
+        
+        if has_service_account:
+            # Try to parse the service account to get project info
+            try:
+                sa_data = json.loads(service_account_json)
+                current_project = sa_data.get('project_id', 'Unknown')
+            except:
+                current_project = 'Invalid JSON'
+        else:
+            current_project = 'No service account'
+        
+        # Test gcloud
+        result = subprocess.run(['gcloud', 'auth', 'list'], 
+                              capture_output=True, text=True, timeout=10)
+        
+        return {
+            "service_account_available": has_service_account,
+            "current_project": current_project,
+            "gcloud_auth": result.stdout,
+            "recommendation": "Create personal Google Cloud project to bypass OAuth issues"
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.route('/health')
 def health():
     return {
         "status": "healthy",
         "platform": "Railway",
-        "note": "Use /auth/manual-steps for authentication instructions"
+        "solution": "Create personal Google Cloud project",
+        "oauth_issue": "Known gcloud CLI bug on servers"
     }
 
 if __name__ == '__main__':
