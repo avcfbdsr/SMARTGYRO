@@ -2,7 +2,6 @@ from flask import Flask, jsonify, request
 import subprocess
 import os
 import json
-import requests
 
 app = Flask(__name__)
 
@@ -37,11 +36,11 @@ def setup_and_activate_service_account():
 
 @app.route('/')
 def hello():
-    return "Google AI on Railway - Using free services!"
+    return "Google ML APIs on Railway - Using correct commands!"
 
 @app.route('/translate', methods=['POST'])
 def google_translate():
-    """Use Google Translate API (has free quota)"""
+    """Use Google Translate API with correct command"""
     try:
         setup_and_activate_service_account()
         
@@ -50,7 +49,8 @@ def google_translate():
         target = data.get('target', 'es')  # Spanish by default
         
         result = subprocess.run([
-            'gcloud', 'ml', 'translate', 'translate', text,
+            'gcloud', 'beta', 'ml', 'translate', 'translate-text',
+            '--content', text,
             '--target-language', target,
             '--format', 'json'
         ], capture_output=True, text=True, timeout=20)
@@ -66,94 +66,116 @@ def google_translate():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/speech/synthesize', methods=['POST'])
-def text_to_speech():
-    """Use Google Text-to-Speech (has free quota)"""
+@app.route('/language/sentiment', methods=['POST'])
+def analyze_sentiment():
+    """Analyze sentiment using Google Natural Language API"""
     try:
         setup_and_activate_service_account()
         
         data = request.get_json()
-        text = data.get('text', 'Hello, this is a test')
+        text = data.get('text', 'I love this product!')
         
         result = subprocess.run([
-            'gcloud', 'ml', 'speech', 'synthesize-text', text,
-            '--output-file', 'output.wav'
-        ], capture_output=True, text=True, timeout=20)
-        
-        return {
-            "success": result.returncode == 0,
-            "text": text,
-            "output": result.stdout,
-            "error": result.stderr,
-            "message": "Audio file would be generated as output.wav"
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/vision/detect', methods=['POST'])
-def vision_api():
-    """Use Google Vision API for image analysis"""
-    try:
-        setup_and_activate_service_account()
-        
-        data = request.get_json()
-        image_url = data.get('image_url', 'https://example.com/image.jpg')
-        
-        result = subprocess.run([
-            'gcloud', 'ml', 'vision', 'detect-labels', image_url
-        ], capture_output=True, text=True, timeout=20)
-        
-        return {
-            "success": result.returncode == 0,
-            "image_url": image_url,
-            "output": result.stdout,
-            "error": result.stderr
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/ai/gemini-free', methods=['POST'])
-def gemini_free_quota():
-    """Try Gemini with free quota (if available)"""
-    try:
-        setup_and_activate_service_account()
-        
-        data = request.get_json()
-        prompt = data.get('prompt', 'Hello')
-        
-        # Try using Gemini Flash (cheaper/free tier)
-        result = subprocess.run([
-            'gcloud', 'ai', 'models', 'predict',
-            '--model', 'gemini-1.5-flash',
-            '--region', 'us-central1',
-            '--json-request', json.dumps({
-                "instances": [{"content": prompt}]
-            })
-        ], capture_output=True, text=True, timeout=30)
-        
-        return {
-            "success": result.returncode == 0,
-            "prompt": prompt,
-            "output": result.stdout,
-            "error": result.stderr,
-            "model": "gemini-1.5-flash"
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/quota/check')
-def check_quotas():
-    """Check available quotas for different services"""
-    try:
-        setup_and_activate_service_account()
-        
-        result = subprocess.run([
-            'gcloud', 'compute', 'project-info', 'describe',
+            'gcloud', 'ml', 'language', 'analyze-sentiment',
+            '--content', text,
             '--format', 'json'
-        ], capture_output=True, text=True, timeout=15)
+        ], capture_output=True, text=True, timeout=20)
+        
+        return {
+            "success": result.returncode == 0,
+            "input": text,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/language/entities', methods=['POST'])
+def analyze_entities():
+    """Extract entities using Google Natural Language API"""
+    try:
+        setup_and_activate_service_account()
+        
+        data = request.get_json()
+        text = data.get('text', 'Google was founded in California by Larry Page and Sergey Brin.')
+        
+        result = subprocess.run([
+            'gcloud', 'ml', 'language', 'analyze-entities',
+            '--content', text,
+            '--format', 'json'
+        ], capture_output=True, text=True, timeout=20)
+        
+        return {
+            "success": result.returncode == 0,
+            "input": text,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/language/classify', methods=['POST'])
+def classify_text():
+    """Classify text using Google Natural Language API"""
+    try:
+        setup_and_activate_service_account()
+        
+        data = request.get_json()
+        text = data.get('text', 'This is a great movie with excellent acting and cinematography.')
+        
+        result = subprocess.run([
+            'gcloud', 'ml', 'language', 'classify-text',
+            '--content', text,
+            '--format', 'json'
+        ], capture_output=True, text=True, timeout=20)
+        
+        return {
+            "success": result.returncode == 0,
+            "input": text,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/translate/detect', methods=['POST'])
+def detect_language():
+    """Detect language using Google Translate API"""
+    try:
+        setup_and_activate_service_account()
+        
+        data = request.get_json()
+        text = data.get('text', 'Bonjour le monde')
+        
+        result = subprocess.run([
+            'gcloud', 'beta', 'ml', 'translate', 'detect-language',
+            '--content', text,
+            '--format', 'json'
+        ], capture_output=True, text=True, timeout=20)
+        
+        return {
+            "success": result.returncode == 0,
+            "input": text,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/translate/languages')
+def supported_languages():
+    """Get supported languages for translation"""
+    try:
+        setup_and_activate_service_account()
+        
+        result = subprocess.run([
+            'gcloud', 'beta', 'ml', 'translate', 'get-supported-languages',
+            '--format', 'json'
+        ], capture_output=True, text=True, timeout=20)
         
         return {
             "success": result.returncode == 0,
@@ -164,32 +186,26 @@ def check_quotas():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/free-services')
-def free_services():
-    """List free Google Cloud services"""
+@app.route('/available-commands')
+def available_commands():
+    """List all available ML commands"""
     return {
-        "free_services": [
-            {
-                "service": "Google Translate",
-                "endpoint": "/translate",
-                "quota": "500,000 characters/month free"
-            },
-            {
-                "service": "Text-to-Speech", 
-                "endpoint": "/speech/synthesize",
-                "quota": "1 million characters/month free"
-            },
-            {
-                "service": "Vision API",
-                "endpoint": "/vision/detect", 
-                "quota": "1,000 requests/month free"
-            },
-            {
-                "service": "Natural Language API",
-                "quota": "5,000 requests/month free"
-            }
+        "translation": [
+            "POST /translate - Translate text",
+            "POST /translate/detect - Detect language",
+            "GET /translate/languages - Get supported languages"
         ],
-        "note": "These services have free quotas that don't require billing setup"
+        "natural_language": [
+            "POST /language/sentiment - Analyze sentiment",
+            "POST /language/entities - Extract entities", 
+            "POST /language/classify - Classify text"
+        ],
+        "examples": {
+            "translate": {"text": "Hello world", "target": "es"},
+            "sentiment": {"text": "I love this product!"},
+            "entities": {"text": "Google was founded in California"},
+            "classify": {"text": "This is a great movie"}
+        }
     }
 
 @app.route('/health')
@@ -198,7 +214,7 @@ def health():
         "status": "healthy",
         "platform": "Railway",
         "gcloud": "authenticated",
-        "free_services_available": True
+        "ml_apis_available": True
     }
 
 if __name__ == '__main__':
