@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: smartgyro-app
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /app/service-account.json
+    buildCommand: chmod +x install-gcloud.sh && ./install-gcloud.sh
