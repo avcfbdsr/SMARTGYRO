@@ -1,10 +1,8 @@
-FROM ubuntu:20.04
+FROM python:3.9-slim
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    python3 \
-    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Cloud CLI
@@ -16,12 +14,15 @@ RUN curl https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud
 # Set PATH
 ENV PATH="/google-cloud-sdk/bin:${PATH}"
 
-# Copy application files
-COPY . /app
+# Set working directory
 WORKDIR /app
 
-# Install Python dependencies
-RUN pip3 install -r requirements.txt
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY . .
 
 # Expose port
 EXPOSE 10000
