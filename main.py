@@ -14,10 +14,10 @@ def hello():
 @app.route('/gcloud/version')
 def gcloud_version():
     try:
-        # Set environment variables for gcloud with Python 3.10
+        # Set environment variables for gcloud with Python 3.11
         env = os.environ.copy()
         env['CLOUDSDK_CORE_DISABLE_PROMPTS'] = '1'
-        env['CLOUDSDK_PYTHON'] = '/usr/bin/python3.10'  # Use system Python 3.10
+        env['CLOUDSDK_PYTHON'] = '/usr/bin/python3.11'  # Use available Python 3.11
         
         result = subprocess.run([GCLOUD_PATH, 'version'], 
                               capture_output=True, 
@@ -30,21 +30,19 @@ def gcloud_version():
     except Exception as e:
         return {"error": str(e)}
 
-@app.route('/python/check')
-def check_python():
+@app.route('/gcloud/help')
+def gcloud_help():
     try:
-        # Check available Python versions
-        result = subprocess.run(['which', 'python3.10'], capture_output=True, text=True)
-        python310_path = result.stdout.strip()
+        env = os.environ.copy()
+        env['CLOUDSDK_CORE_DISABLE_PROMPTS'] = '1'
+        env['CLOUDSDK_PYTHON'] = '/usr/bin/python3.11'
         
-        result2 = subprocess.run(['python3', '--version'], capture_output=True, text=True)
-        current_version = result2.stdout.strip()
-        
-        return {
-            "current_python": current_version,
-            "python3.10_path": python310_path if python310_path else "Not found",
-            "available_pythons": os.listdir('/usr/bin/') if os.path.exists('/usr/bin/') else []
-        }
+        result = subprocess.run([GCLOUD_PATH, '--help'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10,
+                              env=env)
+        return {"output": result.stdout[:1000], "error": result.stderr, "returncode": result.returncode}
     except Exception as e:
         return {"error": str(e)}
 
