@@ -14,26 +14,39 @@ def hello():
 @app.route('/gcloud/version')
 def gcloud_version():
     try:
-        result = subprocess.run([GCLOUD_PATH, 'version'], capture_output=True, text=True, timeout=10)
-        return {"output": result.stdout, "error": result.stderr, "path": GCLOUD_PATH}
-    except Exception as e:
-        return {"error": str(e), "path": GCLOUD_PATH}
-
-@app.route('/gcloud/info')
-def gcloud_info():
-    try:
-        result = subprocess.run([GCLOUD_PATH, 'info'], capture_output=True, text=True, timeout=10)
-        return {"output": result.stdout, "error": result.stderr}
+        # Set environment variables for gcloud
+        env = os.environ.copy()
+        env['CLOUDSDK_CORE_DISABLE_PROMPTS'] = '1'
+        env['CLOUDSDK_PYTHON'] = 'python3'
+        
+        result = subprocess.run([GCLOUD_PATH, 'version'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=30,
+                              env=env)
+        return {"output": result.stdout, "error": result.stderr, "returncode": result.returncode}
+    except subprocess.TimeoutExpired:
+        return {"error": "Command timed out after 30 seconds"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.route('/check')
-def check_installation():
-    return {
-        "gcloud_exists": os.path.exists(GCLOUD_PATH),
-        "gcloud_path": GCLOUD_PATH,
-        "is_executable": os.access(GCLOUD_PATH, os.X_OK) if os.path.exists(GCLOUD_PATH) else False
-    }
+@app.route('/gcloud/quick')
+def gcloud_quick():
+    try:
+        # Quick test with shorter timeout
+        env = os.environ.copy()
+        env['CLOUDSDK_CORE_DISABLE_PROMPTS'] = '1'
+        
+        result = subprocess.run([GCLOUD_PATH, '--help'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=5,
+                              env=env)
+        return {"output": result.stdout[:500], "error": result.stderr, "returncode": result.returncode}
+    except subprocess.TimeoutExpired:
+        return {"error": "Quick test timed out"}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
