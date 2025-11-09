@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import subprocess
 import os
 import json
@@ -12,58 +12,42 @@ def setup_and_activate_service_account():
         if not service_account_json:
             return False, "No service account JSON found"
         
-        # Create service account file
         with open('service-account.json', 'w') as f:
             f.write(service_account_json)
         
-        # Activate service account
-        result1 = subprocess.run([
+        subprocess.run([
             'gcloud', 'auth', 'activate-service-account', 
             '--key-file=service-account.json'
         ], capture_output=True, text=True, timeout=15)
         
-        if result1.returncode != 0:
-            return False, f"Activation failed: {result1.stderr}"
-        
-        # Set as active account
-        result2 = subprocess.run([
+        subprocess.run([
             'gcloud', 'config', 'set', 'account', 
             'railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com'
         ], capture_output=True, text=True, timeout=10)
         
-        # Set project
-        result3 = subprocess.run([
+        subprocess.run([
             'gcloud', 'config', 'set', 'project', 'peppy-bond-477619-a8'
         ], capture_output=True, text=True, timeout=10)
         
-        return True, "Service account activated and configured"
+        return True, "Service account activated"
         
     except Exception as e:
         return False, str(e)
 
 @app.route('/')
 def hello():
-    return "Google CLI on Railway - Authenticated and Ready!"
+    return "Google AI Models on Railway - Ready to use!"
 
-@app.route('/auth/setup')
-def setup_auth():
-    """Setup and activate service account authentication"""
-    success, message = setup_and_activate_service_account()
-    return {
-        "success": success,
-        "message": message
-    }
-
-@app.route('/gcloud/info')
-def gcloud_info():
-    """Get gcloud info (works without additional APIs)"""
+@app.route('/ai/models')
+def list_ai_models():
+    """List available AI models"""
     try:
         setup_and_activate_service_account()
         
-        result = subprocess.run(['gcloud', 'info'], 
-                              capture_output=True, 
-                              text=True, 
-                              timeout=15)
+        result = subprocess.run([
+            'gcloud', 'ai', 'models', 'list', '--region=us-central1'
+        ], capture_output=True, text=True, timeout=20)
+        
         return {
             "success": result.returncode == 0,
             "output": result.stdout,
@@ -72,73 +56,111 @@ def gcloud_info():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/gcloud/auth/list')
-def auth_list():
+@app.route('/ai/endpoints')
+def list_ai_endpoints():
+    """List AI endpoints"""
     try:
-        result = subprocess.run(['gcloud', 'auth', 'list'], 
-                              capture_output=True, 
-                              text=True, 
-                              timeout=10)
+        setup_and_activate_service_account()
+        
+        result = subprocess.run([
+            'gcloud', 'ai', 'endpoints', 'list', '--region=us-central1'
+        ], capture_output=True, text=True, timeout=20)
+        
         return {
-            "success": True,
+            "success": result.returncode == 0,
             "output": result.stdout,
             "error": result.stderr
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/gcloud/config/list')
-def config_list():
+@app.route('/vertex/models')
+def vertex_models():
+    """List Vertex AI models"""
     try:
-        result = subprocess.run(['gcloud', 'config', 'list'], 
-                              capture_output=True, 
-                              text=True, 
-                              timeout=10)
+        setup_and_activate_service_account()
+        
+        result = subprocess.run([
+            'gcloud', 'ai', 'models', 'list', 
+            '--region=us-central1',
+            '--format=json'
+        ], capture_output=True, text=True, timeout=20)
+        
         return {
-            "success": True,
+            "success": result.returncode == 0,
             "output": result.stdout,
             "error": result.stderr
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/gcloud/version')
-def gcloud_version():
+@app.route('/gemini/test', methods=['POST'])
+def test_gemini():
+    """Test Gemini AI model"""
     try:
-        result = subprocess.run(['gcloud', 'version'], 
-                              capture_output=True, 
-                              text=True, 
-                              timeout=10)
+        setup_and_activate_service_account()
+        
+        data = request.get_json()
+        prompt = data.get('prompt', 'Hello, how are you?')
+        
+        # Use curl to call Vertex AI API
+        result = subprocess.run([
+            'curl', '-X', 'POST',
+            f'https://us-central1-aiplatform.googleapis.com/v1/projects/peppy-bond-477619-a8/locations/us-central1/publishers/google/models/gemini-pro:generateContent',
+            '-H', f'Authorization: Bearer $(gcloud auth print-access-token)',
+            '-H', 'Content-Type: application/json',
+            '-d', json.dumps({
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            })
+        ], capture_output=True, text=True, timeout=30, shell=True)
+        
         return {
-            "success": True,
+            "success": result.returncode == 0,
             "output": result.stdout,
             "error": result.stderr
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/enable-api')
-def enable_api_info():
-    """Information about enabling Cloud Resource Manager API"""
-    return {
-        "message": "To use gcloud projects list, enable the Cloud Resource Manager API",
-        "steps": [
-            "1. Go to Google Cloud Console",
-            "2. Visit: https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview?project=peppy-bond-477619-a8",
-            "3. Click 'Enable API'",
-            "4. Wait a few minutes for activation"
-        ],
-        "project_id": "peppy-bond-477619-a8"
-    }
+@app.route('/ai/enable')
+def enable_ai_apis():
+    """Enable required AI APIs"""
+    try:
+        setup_and_activate_service_account()
+        
+        apis = [
+            'aiplatform.googleapis.com',
+            'ml.googleapis.com',
+            'compute.googleapis.com'
+        ]
+        
+        results = []
+        for api in apis:
+            result = subprocess.run([
+                'gcloud', 'services', 'enable', api
+            ], capture_output=True, text=True, timeout=30)
+            
+            results.append({
+                "api": api,
+                "success": result.returncode == 0,
+                "output": result.stdout,
+                "error": result.stderr
+            })
+        
+        return {"results": results}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.route('/health')
 def health():
     return {
         "status": "healthy",
         "platform": "Railway",
-        "gcloud": "installed and authenticated",
-        "project": "peppy-bond-477619-a8",
-        "service_account": "railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com"
+        "gcloud": "authenticated",
+        "ai_ready": True,
+        "project": "peppy-bond-477619-a8"
     }
 
 if __name__ == '__main__':
