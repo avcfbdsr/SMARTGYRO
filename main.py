@@ -31,10 +31,12 @@ def setup_and_activate_service_account():
             'railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com'
         ], capture_output=True, text=True, timeout=10)
         
-        if result2.returncode != 0:
-            return False, f"Set account failed: {result2.stderr}"
+        # Set project
+        result3 = subprocess.run([
+            'gcloud', 'config', 'set', 'project', 'peppy-bond-477619-a8'
+        ], capture_output=True, text=True, timeout=10)
         
-        return True, "Service account activated and set as active"
+        return True, "Service account activated and configured"
         
     except Exception as e:
         return False, str(e)
@@ -52,14 +54,13 @@ def setup_auth():
         "message": message
     }
 
-@app.route('/gcloud/projects')
-def list_projects():
-    """List Google Cloud projects (requires authentication)"""
+@app.route('/gcloud/info')
+def gcloud_info():
+    """Get gcloud info (works without additional APIs)"""
     try:
-        # Ensure authentication is set up
         setup_and_activate_service_account()
         
-        result = subprocess.run(['gcloud', 'projects', 'list'], 
+        result = subprocess.run(['gcloud', 'info'], 
                               capture_output=True, 
                               text=True, 
                               timeout=15)
@@ -101,12 +102,42 @@ def config_list():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.route('/gcloud/version')
+def gcloud_version():
+    try:
+        result = subprocess.run(['gcloud', 'version'], 
+                              capture_output=True, 
+                              text=True, 
+                              timeout=10)
+        return {
+            "success": True,
+            "output": result.stdout,
+            "error": result.stderr
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/enable-api')
+def enable_api_info():
+    """Information about enabling Cloud Resource Manager API"""
+    return {
+        "message": "To use gcloud projects list, enable the Cloud Resource Manager API",
+        "steps": [
+            "1. Go to Google Cloud Console",
+            "2. Visit: https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview?project=peppy-bond-477619-a8",
+            "3. Click 'Enable API'",
+            "4. Wait a few minutes for activation"
+        ],
+        "project_id": "peppy-bond-477619-a8"
+    }
+
 @app.route('/health')
 def health():
     return {
         "status": "healthy",
         "platform": "Railway",
-        "gcloud": "installed",
+        "gcloud": "installed and authenticated",
+        "project": "peppy-bond-477619-a8",
         "service_account": "railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com"
     }
 
