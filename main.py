@@ -34,26 +34,86 @@ def setup_and_activate_service_account():
     except Exception as e:
         return False, str(e)
 
+def install_beta_components():
+    """Install beta components quietly"""
+    try:
+        result = subprocess.run([
+            'gcloud', 'components', 'install', 'beta', '--quiet'
+        ], capture_output=True, text=True, timeout=60)
+        return result.returncode == 0
+    except:
+        return False
+
+def enable_api(api_name):
+    """Enable API quietly"""
+    try:
+        result = subprocess.run([
+            'gcloud', 'services', 'enable', api_name, '--quiet'
+        ], capture_output=True, text=True, timeout=30)
+        return result.returncode == 0, result.stderr
+    except Exception as e:
+        return False, str(e)
+
 @app.route('/')
 def hello():
-    return "Google ML APIs on Railway - Using correct commands!"
+    return "Google ML APIs on Railway - Auto-enabling APIs!"
 
-@app.route('/translate', methods=['POST'])
-def google_translate():
-    """Use Google Translate API with correct command"""
+@app.route('/setup/install-beta')
+def install_beta():
+    """Install beta components"""
+    try:
+        setup_and_activate_service_account()
+        success = install_beta_components()
+        return {
+            "success": success,
+            "message": "Beta components installed" if success else "Failed to install beta components"
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/setup/enable-apis')
+def enable_apis():
+    """Enable required APIs"""
     try:
         setup_and_activate_service_account()
         
+        apis = [
+            'language.googleapis.com',
+            'translate.googleapis.com'
+        ]
+        
+        results = []
+        for api in apis:
+            success, error = enable_api(api)
+            results.append({
+                "api": api,
+                "success": success,
+                "error": error if not success else "Enabled successfully"
+            })
+        
+        return {"results": results}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.route('/translate', methods=['POST'])
+def google_translate():
+    """Use Google Translate API with auto-setup"""
+    try:
+        setup_and_activate_service_account()
+        install_beta_components()
+        enable_api('translate.googleapis.com')
+        
         data = request.get_json()
         text = data.get('text', 'Hello world')
-        target = data.get('target', 'es')  # Spanish by default
+        target = data.get('target', 'es')
         
         result = subprocess.run([
             'gcloud', 'beta', 'ml', 'translate', 'translate-text',
             '--content', text,
             '--target-language', target,
-            '--format', 'json'
-        ], capture_output=True, text=True, timeout=20)
+            '--format', 'json',
+            '--quiet'
+        ], capture_output=True, text=True, timeout=30)
         
         return {
             "success": result.returncode == 0,
@@ -68,9 +128,10 @@ def google_translate():
 
 @app.route('/language/sentiment', methods=['POST'])
 def analyze_sentiment():
-    """Analyze sentiment using Google Natural Language API"""
+    """Analyze sentiment with auto-setup"""
     try:
         setup_and_activate_service_account()
+        enable_api('language.googleapis.com')
         
         data = request.get_json()
         text = data.get('text', 'I love this product!')
@@ -78,8 +139,9 @@ def analyze_sentiment():
         result = subprocess.run([
             'gcloud', 'ml', 'language', 'analyze-sentiment',
             '--content', text,
-            '--format', 'json'
-        ], capture_output=True, text=True, timeout=20)
+            '--format', 'json',
+            '--quiet'
+        ], capture_output=True, text=True, timeout=30)
         
         return {
             "success": result.returncode == 0,
@@ -91,121 +153,45 @@ def analyze_sentiment():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/language/entities', methods=['POST'])
-def analyze_entities():
-    """Extract entities using Google Natural Language API"""
+@app.route('/simple-test')
+def simple_test():
+    """Simple test without complex APIs"""
     try:
         setup_and_activate_service_account()
         
-        data = request.get_json()
-        text = data.get('text', 'Google was founded in California by Larry Page and Sergey Brin.')
-        
+        # Test basic gcloud info
         result = subprocess.run([
-            'gcloud', 'ml', 'language', 'analyze-entities',
-            '--content', text,
-            '--format', 'json'
-        ], capture_output=True, text=True, timeout=20)
+            'gcloud', 'info', '--format', 'json'
+        ], capture_output=True, text=True, timeout=15)
         
-        return {
-            "success": result.returncode == 0,
-            "input": text,
-            "output": result.stdout,
-            "error": result.stderr
-        }
+        if result.returncode == 0:
+            return {
+                "success": True,
+                "message": "Google Cloud CLI is working!",
+                "account": "railway-app@peppy-bond-477619-a8.iam.gserviceaccount.com",
+                "project": "peppy-bond-477619-a8"
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.stderr
+            }
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.route('/language/classify', methods=['POST'])
-def classify_text():
-    """Classify text using Google Natural Language API"""
-    try:
-        setup_and_activate_service_account()
-        
-        data = request.get_json()
-        text = data.get('text', 'This is a great movie with excellent acting and cinematography.')
-        
-        result = subprocess.run([
-            'gcloud', 'ml', 'language', 'classify-text',
-            '--content', text,
-            '--format', 'json'
-        ], capture_output=True, text=True, timeout=20)
-        
-        return {
-            "success": result.returncode == 0,
-            "input": text,
-            "output": result.stdout,
-            "error": result.stderr
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/translate/detect', methods=['POST'])
-def detect_language():
-    """Detect language using Google Translate API"""
-    try:
-        setup_and_activate_service_account()
-        
-        data = request.get_json()
-        text = data.get('text', 'Bonjour le monde')
-        
-        result = subprocess.run([
-            'gcloud', 'beta', 'ml', 'translate', 'detect-language',
-            '--content', text,
-            '--format', 'json'
-        ], capture_output=True, text=True, timeout=20)
-        
-        return {
-            "success": result.returncode == 0,
-            "input": text,
-            "output": result.stdout,
-            "error": result.stderr
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/translate/languages')
-def supported_languages():
-    """Get supported languages for translation"""
-    try:
-        setup_and_activate_service_account()
-        
-        result = subprocess.run([
-            'gcloud', 'beta', 'ml', 'translate', 'get-supported-languages',
-            '--format', 'json'
-        ], capture_output=True, text=True, timeout=20)
-        
-        return {
-            "success": result.returncode == 0,
-            "output": result.stdout,
-            "error": result.stderr
-        }
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.route('/available-commands')
-def available_commands():
-    """List all available ML commands"""
+@app.route('/status')
+def status():
+    """Check current status"""
     return {
-        "translation": [
-            "POST /translate - Translate text",
-            "POST /translate/detect - Detect language",
-            "GET /translate/languages - Get supported languages"
+        "message": "Google ML APIs require manual API enabling",
+        "steps": [
+            "1. Go to Google Cloud Console",
+            "2. Enable Natural Language API: https://console.developers.google.com/apis/api/language.googleapis.com/overview?project=peppy-bond-477619-a8",
+            "3. Enable Translate API: https://console.developers.google.com/apis/api/translate.googleapis.com/overview?project=peppy-bond-477619-a8",
+            "4. Wait a few minutes for activation"
         ],
-        "natural_language": [
-            "POST /language/sentiment - Analyze sentiment",
-            "POST /language/entities - Extract entities", 
-            "POST /language/classify - Classify text"
-        ],
-        "examples": {
-            "translate": {"text": "Hello world", "target": "es"},
-            "sentiment": {"text": "I love this product!"},
-            "entities": {"text": "Google was founded in California"},
-            "classify": {"text": "This is a great movie"}
-        }
+        "working_endpoint": "/simple-test - Basic gcloud test"
     }
 
 @app.route('/health')
@@ -214,7 +200,7 @@ def health():
         "status": "healthy",
         "platform": "Railway",
         "gcloud": "authenticated",
-        "ml_apis_available": True
+        "note": "APIs need manual enabling in Google Cloud Console"
     }
 
 if __name__ == '__main__':
